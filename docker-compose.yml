@@ -1,0 +1,51 @@
+name: ecommerce-api
+
+services:
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-changeme_root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-ecommerce}
+      MYSQL_USER: ${MYSQL_USER:-ecommerce}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-changeme_app}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    # Solo la API habla con MySQL en la red interna.
+    # Para inspeccionar desde el host, descomenta:
+    # ports:
+    #   - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - backend
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: mysql+pymysql://${MYSQL_USER:-ecommerce}:${MYSQL_PASSWORD:-changeme_app}@db:3306/${MYSQL_DATABASE:-ecommerce}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - backend
+
+volumes:
+  mysql_data:
+    name: ecommerce_mysql_data
+
+networks:
+  backend:
+    driver: bridge
