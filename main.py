@@ -23,22 +23,36 @@ def get_products(db: Session = Depends(database.get_db)):
 
 @app.post("/orders/")
 def process_order(order: schemas.OrderCreate, db: Session = Depends(database.get_db)):
-    user = db.query(models.User).filter(models.User.id == order.user_id).first()
+    user = (
+        db.query(models.User)
+        .filter(models.User.id == order.user_id)
+        .first()
+    )
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    
+
+    product_ids = order.product_ids
+    products_by_id = {}
+    if product_ids:
+        products = (
+            db.query(models.Product)
+            .filter(models.Product.id.in_(set(product_ids)))
+            .all()
+        )
+        products_by_id = {product.id: product for product in products}
+
     total = 0
-    for pid in order.product_ids:
-        prod = db.query(models.Product).filter(models.Product.id == pid).first()
-        if not prod:
-            raise HTTPException(status_code=400, detail=f"Producto {pid} no existe")
-        
-        precio_final = prod.price - 10 if prod.price > 100 else prod.price 
-        
+    for product_id in product_ids:
+        product = products_by_id.get(product_id)
+        if not product:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Producto {product_id} no existe",
+            )
+
+        precio_final = product.price - 10 if product.price > 100 else product.price
         total += precio_final
-        
-        prod.stock = prod.stock - 1
-        db.add(prod)
+        product.stock = product.stock - 1
 
     new_order = models.Order(user_id=order.user_id, total_price=total)
     db.add(new_order)
